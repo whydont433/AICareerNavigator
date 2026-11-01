@@ -3,6 +3,9 @@ package navigator;
 import navigator.user.MemoryUserRepository;
 import navigator.user.UserController;
 import navigator.user.UserService;
+import navigator.vacancy.VacancyController;
+import navigator.vacancy.VacancyRepository;
+import navigator.vacancy.VacancyService;
 
 import java.util.Arrays;
 import java.util.TreeMap;
@@ -46,6 +49,9 @@ public class Main {
                 System.out.println(e.getMessage());
             }
         }
+
+
+
     }
 
     private static void addCommands(Map<String, Command> all, Map<String, Command> fromModule) {
