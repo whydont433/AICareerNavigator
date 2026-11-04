@@ -2,9 +2,12 @@ package navigator.vacancy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import navigator.common.HhExperience;
+import navigator.vacancy.HtmlCleaner;
+import navigator.vacancy.SearchParams;
+import navigator.vacancy.Vacancy;
+import navigator.vacancy.VacancyRepository;
 
-
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -12,12 +15,13 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.Set;
 
-
 public class VacancyService {
+
+    private static final String API_URL =
+            "https://api.superjob.ru/2.0";
 
     private final VacancyRepository repository;
 
@@ -25,12 +29,7 @@ public class VacancyService {
 
     private final ObjectMapper mapper;
 
-    private final String token;
-
-    private final String userAgent;
-
-    private static final String API_URL =
-            "https://api.hh.ru";
+    private final String apiKey;
 
     public VacancyService(VacancyRepository repository) {
 
@@ -40,186 +39,219 @@ public class VacancyService {
 
         this.mapper = new ObjectMapper();
 
-        this.token = System.getenv("HH_ACCESS_TOKEN");
+        this.apiKey = System.getenv("SUPERJOB_API_KEY");
 
-        this.userAgent = System.getenv().getOrDefault(
-                "HH_USER_AGENT",
-                "AICareerNavigator/1.0 (drnaleks@gmail.com)"
-        );
+
     }
 
-    // Метод для сбора вакансий
-    public int collectVacancies(SearchParams params) throws Exception {
+    // Основной метод сбора вакансий
+    public int collectVacancies(SearchParams params)
+            throws IOException, InterruptedException {
 
         int collected = 0;
 
-        int page = 0;
-
         Set<String> processedIds = new HashSet<>();
 
-        while (collected < params.limit() && page < 20) {
+        // Максимальное количество вакансий
+        int limit = SearchParams.VACANCY_LIMIT;
 
-            String url = API_URL + "/vacancies"
-                    + "?text=" + encode(params.profession())
-                    + "&period=30"
-                    + "&per_page=100"
-                    + "&page=" + page;
 
-            //Получаем список вакансий
-            JsonNode response = sendRequest(url);
 
-            JsonNode items = response.get("items");
+        // Получаем категории опыта для выбранного уровня
+        var experiences =
+                org.example.vacancy.SuperJobExperience.forGrade(params.grade());
 
-            if (items == null || items.isEmpty()) {
+        for (org.example.vacancy.SuperJobExperience experience : experiences) {
+
+            if (collected >= limit) {
                 break;
             }
 
-            for (JsonNode item : items) {
+            int page = 0;
+            boolean more = true;
 
-                if (collected >= params.limit()) {
+            while (more && collected < limit) {
+
+                int count = Math.min(100, limit - collected);
+
+                String url = buildSearchUrl(
+                        params.profession(),
+                        experience,
+                        count,
+                        page
+                );
+
+                JsonNode response = sendRequest(url);
+
+                JsonNode objects = response.path("objects");
+
+                if (!objects.isArray() || objects.isEmpty()) {
                     break;
                 }
 
-                String hhId = item.path("id").asText("");
+                for (JsonNode item : objects) {
 
-                if (hhId.isEmpty() || !processedIds.add(hhId)) {
-                    continue;
-                }
+                    if (collected >= limit) {
+                        break;
+                    }
 
-                //Получаем полную информацию о вакансии
-                JsonNode details;
+                    String sourceId = item.path("id").asText("");
 
-                try {
-                    details = sendRequest(
-                            API_URL + "/vacancies/" + hhId
+                    if (sourceId.isBlank()
+                            || !processedIds.add(sourceId)) {
+                        continue;
+                    }
+
+                    Vacancy vacancy = parseVacancy(item);
+
+                    if (vacancy == null) {
+                        continue;
+                    }
+
+                    repository.save(vacancy);
+
+                    collected++;
+
+                    System.out.println(
+                            "Найдена вакансия: " + vacancy.name()
                     );
-                } catch (Exception e) {
-                    continue;
                 }
 
-                //Получаем опыт работы
-                String experience = details
-                        .path("experience")
-                        .path("id")
-                        .asText("");
+                more = response.path("more").asBoolean(false);
 
-                HhExperience hhExperience = HhExperience.fromApi(experience);
-
-                if (hhExperience == null) {
-                    continue;
-                }
-
-                //Проверяем соответствие уровня
-                if (hhExperience.getGrade() != params.grade()) {
-                    continue;
-                }
-
-                //Проверяем дату публикации
-                Instant publishedAt = Instant.parse(
-                        details.path("published_at").asText()
-                );
-
-                Instant dateLimit = Instant.now()
-                        .minus(params.periodDays(), ChronoUnit.DAYS);
-
-                if (publishedAt.isBefore(dateLimit)) {
-                    continue;
-                }
-
-                //Получаем описание и очищаем HTML
-                String html = details
-                        .path("description")
-                        .asText("");
-
-                String description = HtmlCleaner.clean(html);
-
-                //Получаем название вакансии
-                String name = details
-                        .path("name")
-                        .asText("");
-
-                //Получаем регион
-                String area = details
-                        .path("area")
-                        .path("name")
-                        .asText("");
-
-                //Получаем работодателя
-                String employer = details
-                        .path("employer")
-                        .path("name")
-                        .asText("");
-
-                //Создаём объект вакансии
-                Vacancy vacancy = new Vacancy(
-                        null,
-                        hhId,
-                        name,
-                        description,
-                        publishedAt,
-                        details.path("alternate_url").asText(""),
-                        area,
-                        employer,
-                        hhExperience,
-                        hhExperience.getGrade(),
-                        Instant.now(),
-                        null
-                );
-
-                //Сохраняем вакансию
-                repository.save(vacancy);
-
-                collected++;
-
-                System.out.println(
-                        "Собрана вакансия: " + name
-                );
-            }
-
-            //Если страниц больше нет, заканчиваем поиск
-            int pages = response.path("pages").asInt(0);
-
-            page++;
-
-            if (page >= pages) {
-                break;
+                page++;
             }
         }
 
         return collected;
     }
 
-    //Отправка GET-запроса
-    private JsonNode sendRequest(String url) throws Exception {
+    // Формирование URL запроса
+    private String buildSearchUrl(
+            String profession,
+            org.example.vacancy.SuperJobExperience experience,
+            int count,
+            int page
+    ) {
 
-        HttpRequest.Builder request = HttpRequest.newBuilder()
+        return API_URL + "/vacancies/"
+                + "?keyword=" + encode(profession)
+                + "&experience=" + experience.getApiValue()
+                + "&order_field=date"
+                + "&order_direction=desc"
+                + "&count=" + count
+                + "&page=" + page;
+    }
+
+    // Отправка GET-запроса к SuperJob API
+    private JsonNode sendRequest(String url)
+            throws IOException, InterruptedException {
+
+        HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header("User-Agent", userAgent)
+                .header("X-Api-App-Id", apiKey)
                 .header("Accept", "application/json")
-                .GET();
-
-        if (token != null && !token.isBlank()) {
-            request.header(
-                    "Authorization",
-                    "Bearer " + token
-            );
-        }
+                .GET()
+                .build();
 
         HttpResponse<String> response = client.send(
-                request.build(),
+                request,
                 HttpResponse.BodyHandlers.ofString()
         );
 
         if (response.statusCode() != 200) {
+
             throw new RuntimeException(
-                    "Ошибка HH API: " + response.statusCode()
+                    "Ошибка SuperJob API. HTTP "
+                            + response.statusCode()
+                            + ": " + response.body()
             );
         }
 
         return mapper.readTree(response.body());
     }
 
+    // Преобразование JSON-объекта в Vacancy
+    private Vacancy parseVacancy(JsonNode item) {
 
+        String sourceId = item.path("id").asText("");
+
+        if (sourceId.isBlank()) {
+            return null;
+        }
+
+        String name = item.path("profession").asText("");
+
+        if (name.isBlank()) {
+            return null;
+        }
+
+
+        String work = item.path("work").asText("");
+
+        // Требования к кандидату
+        String candidat = item.path("candidat").asText("");
+
+
+        String compensation = item.path("compensation").asText("");
+
+
+        String description = """
+                Обязанности:
+                %s
+
+                Требования:
+                %s
+
+                Условия:
+                %s
+                """.formatted(work, candidat, compensation);
+
+        description = HtmlCleaner.clean(description);
+
+
+        long publishedTimestamp =
+                item.path("date_published").asLong(0);
+
+        Instant publishedAt = publishedTimestamp > 0
+                ? Instant.ofEpochSecond(publishedTimestamp)
+                : null;
+
+
+        String experienceId =
+                item.path("experience").path("id").asText("");
+
+        org.example.vacancy.SuperJobExperience experience =
+                org.example.vacancy.SuperJobExperience.fromApi(experienceId);
+
+        if (experience == null) {
+            return null;
+        }
+
+
+        String area = item.path("town").path("title").asText("");
+
+        String employer = item.path("firm_name").asText("");
+
+        String url = item.path("link").asText("");
+
+        return new Vacancy(
+                null,
+                sourceId,
+                name,
+                description,
+                publishedAt,
+                url,
+                area,
+                employer,
+                experience,
+                experience.getGrade(),
+                Instant.now(),
+                null
+        );
+    }
+
+    // Кодирование параметров URL
     private String encode(String value) {
 
         return URLEncoder.encode(

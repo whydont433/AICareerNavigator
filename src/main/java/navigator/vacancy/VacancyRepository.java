@@ -12,6 +12,6 @@ public interface VacancyRepository {
     // Получить все вакансии
     List<Vacancy> findAll();
 
-    // Найти вакансию по ID с HH.ru
-    Optional<Vacancy> findByHhId(String hhId);
+    // Найти вакансию по ID с SuperJob
+    Optional<Vacancy> findBySourceId(String sourceId);
 }

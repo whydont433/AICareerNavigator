@@ -3,6 +3,7 @@ package navigator;
 import navigator.user.MemoryUserRepository;
 import navigator.user.UserController;
 import navigator.user.UserService;
+import navigator.vacancy.MemoryVacancyRepository;
 import navigator.vacancy.VacancyController;
 import navigator.vacancy.VacancyRepository;
 import navigator.vacancy.VacancyService;
@@ -15,7 +16,13 @@ import java.util.Scanner;
 public class Main {
     public static void main(String[] args) {
         UserService userService = new UserService(new MemoryUserRepository());
-        UserController userController = new UserController(userService);
+        VacancyRepository vacancyRepository = new MemoryVacancyRepository();
+
+        VacancyService vacancyService = new VacancyService(vacancyRepository);
+
+        VacancyController vacancyController = new VacancyController(vacancyService, vacancyRepository);
+
+        UserController userController = new UserController(userService, vacancyController);
 
         Map<String, Command> commands = new TreeMap<>();
         addCommands(commands, userController.commands());
@@ -49,6 +56,8 @@ public class Main {
                 System.out.println(e.getMessage());
             }
         }
+
+
 
 
 
