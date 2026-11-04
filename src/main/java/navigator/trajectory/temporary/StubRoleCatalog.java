@@ -5,7 +5,7 @@ import navigator.trajectory.external.RoleInfo;
 
 import java.util.List;
 
-/** Заглушка 4.1: пара ролей вручную. */
+/** Заглушка - пара ролей вручную. */
 public class StubRoleCatalog implements RoleCatalog {
     private final List<RoleInfo> roles = List.of(
             new RoleInfo("java-dev", "Java Developer"),

@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
-/** Профиль пользователя (раздел 3 ТЗ): уровни навыков, целевая роль, часы в неделю. */
+/** Профиль пользователя. Уровни навыков, целевая роль, часы в неделю. */
 public class SkillProfileService implements SkillProfileApi {
     private static final int MIN_LEVEL = 0;
     private static final int MAX_LEVEL = 6;
@@ -36,7 +36,7 @@ public class SkillProfileService implements SkillProfileApi {
         this.dictionary = dictionary;
     }
 
-    /** Подписаться на ProfileUpdated. Например, 4.4: service.onProfileUpdated(e -> planner.rebuild(e.userId())). */
+    /** Подписаться на ProfileUpdated. */
     public void onProfileUpdated(Consumer<ProfileUpdated> listener) {
         listeners.add(listener);
     }
@@ -56,7 +56,6 @@ public class SkillProfileService implements SkillProfileApi {
         }
 
         Optional<UserSkill> old = skills.find(userId, skillId);
-        // результаты теста при смене уровня не теряем
         Integer testLevel = old.isPresent() ? old.get().testLevel() : null;
         LocalDateTime testAt = old.isPresent() ? old.get().testAt() : null;
 
@@ -68,11 +67,11 @@ public class SkillProfileService implements SkillProfileApi {
         }
     }
 
-    /** Команда skill set <название> <уровень>. Возвращает id навыка. Не найден / неоднозначно — IllegalArgumentException. */
+    /** Команда skill set <название> <уровень>. Возвращает id навыка. */
     public long setLevelByName(long userId, String skillText, int level) {
         List<Long> found = dictionary.find(skillText);
         if (found.isEmpty()) {
-            throw new IllegalArgumentException("Навык «" + skillText + "» не найден. Введите другое название");
+            throw new IllegalArgumentException("Навык «" + skillText + "» не найден.");
         }
         if (found.size() > 1) {
             List<String> names = new ArrayList<>();
@@ -80,7 +79,7 @@ public class SkillProfileService implements SkillProfileApi {
                 names.add(dictionary.nameOf(id));
             }
             throw new IllegalArgumentException(
-                    "«" + skillText + "» — это несколько навыков: " + String.join(", ", names) + ". Уточните название");
+                    "«" + skillText + "» — это несколько навыков: " + String.join(", ", names));
         }
         long skillId = found.get(0);
         setLevel(userId, skillId, level, SkillSource.MANUAL);
@@ -92,7 +91,7 @@ public class SkillProfileService implements SkillProfileApi {
         return targets.findTarget(userId);
     }
 
-    /** Команда role select. Профиль при смене роли не трогаем — он один на пользователя. */
+    /** Команда role select.  */
     public void selectRole(long userId, String roleId, Grade grade) {
         if (!roles.exists(roleId)) {
             throw new IllegalArgumentException("Роль «" + roleId + "» не найдена. Список: roles");
@@ -113,7 +112,6 @@ public class SkillProfileService implements SkillProfileApi {
         targets.saveAvailableTimeWeekly(userId, hours);
     }
 
-    /** Для fill: навыки роли, которые пользователь ещё не заполнил, в порядке профиля (по весу). */
     public List<RoleProfileSkill> unfilledSkills(long userId, RoleProfile profile) {
         List<RoleProfileSkill> result = new ArrayList<>();
         for (RoleProfileSkill rs : profile.skills()) {
@@ -124,12 +122,6 @@ public class SkillProfileService implements SkillProfileApi {
         return result;
     }
 
-    /**
-     * Результат теста (событие TestCompleted от 4.5).
-     * Пусто — спрашивать не о чем. Есть значение — текущий уровень, он отличается от теста:
-     * спросить пользователя один раз; согласился — setLevel(..., TEST), отказался — ничего не делать.
-     * Если навык ещё не заполнен — ставим уровень по тесту сразу, спорить не с чем.
-     */
     public Optional<Integer> recordTest(long userId, long skillId, int testLevel) {
         if (testLevel < MIN_LEVEL || testLevel > MAX_LEVEL) {
             throw new IllegalArgumentException("Уровень по тесту от 0 до 6");

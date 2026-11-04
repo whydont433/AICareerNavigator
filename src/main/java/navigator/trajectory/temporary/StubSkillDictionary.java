@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Заглушка 4.1: справочник навыков с синонимами. */
+/** Заглушка - справочник навыков с синонимами. */
 public class StubSkillDictionary implements SkillDictionary {
     private final Map<Long, String> names = new LinkedHashMap<>();
     private final Map<Long, List<String>> aliases = new LinkedHashMap<>();

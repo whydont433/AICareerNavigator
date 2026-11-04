@@ -27,7 +27,6 @@ public class MemoryRoleProfileRepository implements RoleProfileRepository{
     }
 
 
-    /** Запрещает два одинаковых профиля **/
     @Override
     public void replaceAll(List<RoleProfile> newProfiles) {
         Set<String> seen = new HashSet<>();
