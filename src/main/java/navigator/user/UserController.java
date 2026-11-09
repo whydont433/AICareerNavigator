@@ -1,22 +1,28 @@
 package navigator.user;
 
 import navigator.Command;
+import navigator.vacancy.VacancyController;
 
 import java.util.Map;
 
 public class UserController {
     private final UserService service;
+    private final VacancyController vacancyController;
 
-    public UserController(UserService service) {
+    public UserController(
+            UserService service,
+            VacancyController vacancyController
+    ) {
         this.service = service;
+        this.vacancyController = vacancyController;
     }
-
     public Map<String, Command> commands() {
         return Map.of(
                 "register", this::register,
                 "login", this::login,
                 "logout", this::logout,
-                "whoami", this::whoami
+                "whoami", this::whoami,
+                "find-vacancy", this::findVacancy
         );
     }
 
@@ -37,6 +43,20 @@ public class UserController {
 
     private void whoami(String[] args) {
         System.out.println(service.isLoggedIn() ? "Вы: " + service.requireUser().name() : "Вы не вошли.");
+    }
+
+    private void findVacancy(String[] args) {
+        if (args.length != 0) {
+            throw new IllegalArgumentException(
+            );
+        }
+
+        if (!service.isLoggedIn()) {
+            System.out.println("Сначала необходимо войти в аккаунт.");
+            return;
+        }
+
+        vacancyController.start();
     }
 
     private String oneArg(String[] args, String usage) {
