@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: career_navigator_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: career_navigator
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./src/main/resources/schema.sql:/docker-entrypoint-initdb.d/init.sql
+      - pg_data:/var/lib/postgresql
+
+volumes:
+  pg_data:

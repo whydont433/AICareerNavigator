@@ -1,5 +1,6 @@
 package navigator;
 
+import navigator.user.DbUserRepository;
 import navigator.user.MemoryUserRepository;
 import navigator.user.UserController;
 import navigator.user.UserService;
@@ -15,7 +16,12 @@ import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
-        UserService userService = new UserService(new MemoryUserRepository());
+        //UserService userService = new UserService(new MemoryUserRepository());
+        UserService userService = new UserService(new DbUserRepository(
+                "jdbc:postgresql://localhost:5432/career_navigator",
+                "postgres",
+                "postgres"
+        ));
         VacancyRepository vacancyRepository = new MemoryVacancyRepository();
 
         VacancyService vacancyService = new VacancyService(vacancyRepository);
