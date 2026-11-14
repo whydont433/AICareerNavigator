@@ -11,7 +11,7 @@ public class DatabaseConfig {
 
     private static final String USER = "postgres";
 
-    public Connection getConnection() throws SQLException {
+    public static Connection getConnection() throws SQLException {
         String password = System.getenv("DB_PASSWORD");
 
         return DriverManager.getConnection(URL, USER, password);

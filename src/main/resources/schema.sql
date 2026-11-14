@@ -87,3 +87,4 @@ CREATE TABLE vacancy_skills (
                                 confidence NUMERIC(3,2) CHECK (confidence >= 0 AND confidence <= 1),
                                 PRIMARY KEY (vacancy_id, skill_id)
 );
+

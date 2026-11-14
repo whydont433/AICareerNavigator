@@ -1,6 +1,8 @@
+
 package navigator.vacancy;
 
 import navigator.common.Grade;
+import navigator.analysis.VacancyAnalysisService;
 
 import java.util.Scanner;
 
@@ -8,18 +10,22 @@ public class VacancyController {
 
     private final VacancyService vacancyService;
     private final VacancyRepository repository;
+    private final VacancyAnalysisService vacancyAnalysisService;
+    private final Scanner scanner;
 
     public VacancyController(
             VacancyService vacancyService,
-            VacancyRepository repository
+            VacancyRepository repository,
+            VacancyAnalysisService vacancyAnalysisService,
+            Scanner scanner
     ) {
         this.vacancyService = vacancyService;
         this.repository = repository;
+        this.vacancyAnalysisService = vacancyAnalysisService;
+        this.scanner = scanner;
     }
 
     public void start() {
-
-        Scanner scanner = new Scanner(System.in);
 
         System.out.println("Введите профессию:");
         String profession = scanner.nextLine();
@@ -31,7 +37,15 @@ public class VacancyController {
                 3 — Senior
                 """);
 
-        int gradeNumber = scanner.nextInt();
+        int gradeNumber;
+
+        try {
+            gradeNumber = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "Уровень необходимо выбрать числом: 1, 2 или 3"
+            );
+        }
 
         Grade grade = switch (gradeNumber) {
             case 1 -> Grade.JUNIOR;
@@ -47,27 +61,47 @@ public class VacancyController {
                 grade
         );
 
+        System.out.println("Начинаем сбор вакансий из SuperJob...");
+
         try {
+            // ЭТАП 1. Сбор и сохранение вакансий
+            int collected = vacancyService.collectVacancies(params);
 
             System.out.println(
-                    "Начинаем сбор вакансий из SuperJob..."
+                    "Сбор завершён. Получено вакансий: " + collected
             );
 
-            int collected =
-                    vacancyService.collectVacancies(params);
+            // ЭТАП 2. Автоматический AI-анализ
+            if (collected > 0) {
+                System.out.println(
+                        "Начинаем анализ вакансий с помощью GigaChat..."
+                );
 
-            System.out.println(
-                    "Сбор завершён. Получено вакансий: "
-                            + collected
-            );
+                vacancyAnalysisService.analyzeVacancies();
 
+                System.out.println(
+                        "AI-анализ вакансий завершён."
+                );
+            } else {
+                System.out.println(
+                        "Новых вакансий нет. AI-анализ не требуется."
+                );
+            }
 
-
-        } catch (Exception e) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
 
             System.err.println(
-                    "Ошибка при сборе вакансий: " + e.getMessage()
+                    "Анализ вакансий был прерван."
             );
+
+        } catch (Exception e) {
+            System.err.println(
+                    "Ошибка при сборе или анализе вакансий: "
+                            + e.getMessage()
+            );
+
+            e.printStackTrace();
         }
     }
 }
