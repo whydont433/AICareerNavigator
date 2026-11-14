@@ -1,13 +1,11 @@
 package navigator;
 
+import navigator.config.DatabaseConfig;
 import navigator.user.DbUserRepository;
 import navigator.user.MemoryUserRepository;
 import navigator.user.UserController;
 import navigator.user.UserService;
-import navigator.vacancy.MemoryVacancyRepository;
-import navigator.vacancy.VacancyController;
-import navigator.vacancy.VacancyRepository;
-import navigator.vacancy.VacancyService;
+import navigator.vacancy.*;
 
 import java.util.Arrays;
 import java.util.TreeMap;
@@ -22,7 +20,9 @@ public class Main {
                 "postgres",
                 "postgres"
         ));
-        VacancyRepository vacancyRepository = new MemoryVacancyRepository();
+        DatabaseConfig databaseConfig = new DatabaseConfig();
+
+        VacancyRepository vacancyRepository = new PostgresVacancyRepository(databaseConfig);
 
         VacancyService vacancyService = new VacancyService(vacancyRepository);
 
