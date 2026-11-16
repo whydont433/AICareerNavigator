@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
@@ -46,7 +47,7 @@ public class VacancyService {
 
     // Основной метод сбора вакансий
     public int collectVacancies(SearchParams params)
-            throws IOException, InterruptedException {
+            throws IOException, InterruptedException, SQLException {
 
         int collected = 0;
 
@@ -108,7 +109,7 @@ public class VacancyService {
                         continue;
                     }
 
-                    repository.save(vacancy);
+                    repository.save(vacancy, params.profession());
 
                     collected++;
 

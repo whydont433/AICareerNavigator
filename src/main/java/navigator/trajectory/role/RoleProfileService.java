@@ -83,7 +83,7 @@ public class RoleProfileService implements RoleProfileApi {
         for (VacancyData v : sample) {
             Set<Long> seenInThisVacancy = new HashSet<>();
             for (VacancySkill s : v.skills()) {
-                long id = s.skillId();
+                long id = s.id();
                 if (!seenInThisVacancy.add(id)) {
                     continue;
                 }

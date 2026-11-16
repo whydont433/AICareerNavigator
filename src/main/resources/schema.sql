@@ -35,7 +35,7 @@ CREATE TABLE analysis_runs (
 
 CREATE TABLE vacancies (
                            id SERIAL PRIMARY KEY,
-                           hh_id TEXT NOT NULL UNIQUE,
+                           source_id TEXT NOT NULL UNIQUE,
                            profession_id INTEGER NOT NULL REFERENCES professions(id),
                            analysis_run_id INTEGER REFERENCES analysis_runs(id) ON DELETE SET NULL,
                            name TEXT NOT NULL,
@@ -44,7 +44,7 @@ CREATE TABLE vacancies (
                            url TEXT,
                            area TEXT,
                            employer TEXT,
-                           hh_experience TEXT,
+                           superjob_experience TEXT,
                            grade TEXT NOT NULL CHECK (grade IN ('JUNIOR', 'MIDDLE', 'SENIOR')),
                            fetched_at TIMESTAMP NOT NULL DEFAULT NOW(),
                            ai_status BOOLEAN NOT NULL DEFAULT FALSE
@@ -87,3 +87,4 @@ CREATE TABLE vacancy_skills (
                                 confidence NUMERIC(3,2) CHECK (confidence >= 0 AND confidence <= 1),
                                 PRIMARY KEY (vacancy_id, skill_id)
 );
+

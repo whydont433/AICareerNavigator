@@ -16,8 +16,24 @@ public record Vacancy(
         org.example.vacancy.SuperJobExperience experience,
         Grade grade,
         Instant fetchedAt,
-        Long roleId
+        Long professionId
 ) {
+    public Vacancy withId(Long newId) {
+        return new Vacancy(
+                newId,
+                sourceId,
+                name,
+                description,
+                publishedAt,
+                url,
+                area,
+                employer,
+                experience,
+                grade,
+                fetchedAt,
+                professionId
+        );
+    }
 
 
 }
