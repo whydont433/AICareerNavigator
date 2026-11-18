@@ -33,15 +33,7 @@ public class Main {
         // Один Scanner для всего консольного приложения
         Scanner in = new Scanner(System.in);
 
-        // =========================================
-        // 1. Подключение к базе данных
-        // =========================================
-
         DatabaseConfig databaseConfig = new DatabaseConfig();
-
-        // =========================================
-        // 2. Создание пользовательского модуля
-        // =========================================
 
         UserService userService = new UserService(
                 new DbUserRepository(
@@ -51,9 +43,6 @@ public class Main {
                 )
         );
 
-        // =========================================
-        // 3. Создание модуля сбора вакансий
-        // =========================================
 
         VacancyRepository vacancyRepository =
                 new PostgresVacancyRepository(databaseConfig);
@@ -61,9 +50,6 @@ public class Main {
         VacancyService vacancyService =
                 new VacancyService(vacancyRepository);
 
-        // =========================================
-        // 4. Создание модуля AI-анализа вакансий
-        // =========================================
 
         // Клиент GigaChat
         GigaChatClient gigaChatClient = new GigaChatClient();
@@ -95,9 +81,6 @@ public class Main {
                         normalizationService
                 );
 
-        // =========================================
-        // 5. Создание контроллеров
-        // =========================================
 
         VacancyController vacancyController =
                 new VacancyController(
@@ -113,17 +96,11 @@ public class Main {
                         vacancyController
                 );
 
-        // =========================================
-        // 6. Регистрация команд
-        // =========================================
 
         Map<String, Command> commands = new TreeMap<>();
 
         addCommands(commands, userController.commands());
 
-        // =========================================
-        // 7. Запуск консольного приложения
-        // =========================================
 
         System.out.println(
                 "AI Career Navigator. Команды: "
