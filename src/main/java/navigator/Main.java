@@ -23,6 +23,22 @@ import navigator.skills.PostgresSkillRepository;
 import navigator.skills.SkillSynonymDictionary;
 import navigator.skills.SkillNormalizationService;
 
+import navigator.trajectory.TrajectoryController;
+import navigator.trajectory.external.RoleCatalog;
+import navigator.trajectory.external.SkillDictionary;
+import navigator.trajectory.external.PostgresRoleCatalog;
+import navigator.trajectory.external.PostgresSkillDictionary;
+import navigator.trajectory.external.PostgresVacancyReader;
+import navigator.trajectory.external.VacancyReader;
+import navigator.trajectory.matching.MatchingService;
+import navigator.trajectory.profile.PostgresUserSkillRepository;
+import navigator.trajectory.profile.PostgresUserTargetRepository;
+import navigator.trajectory.profile.SkillProfileService;
+import navigator.trajectory.profile.UserSkillRepository;
+import navigator.trajectory.role.PostgresRoleProfileRepository;
+import navigator.trajectory.role.RoleProfileRepository;
+import navigator.trajectory.role.RoleProfileService;
+
 import java.util.Arrays;
 import java.util.TreeMap;
 import java.util.Map;
@@ -99,10 +115,37 @@ public class Main {
                 );
 
 
+        // Модуль траектории навыков
+        RoleCatalog roleCatalog = new PostgresRoleCatalog();
+        SkillDictionary skillDictionary = new PostgresSkillDictionary(synonymDictionary);
+        RoleProfileRepository roleProfileRepository = new PostgresRoleProfileRepository();
+        UserSkillRepository userSkillRepository = new PostgresUserSkillRepository();
+        VacancyReader trajectoryVacancies = new PostgresVacancyReader();
+
+        RoleProfileService roleProfileService =
+                new RoleProfileService(roleProfileRepository, trajectoryVacancies, roleCatalog);
+
+        SkillProfileService skillProfileService = new SkillProfileService(
+                userSkillRepository, new PostgresUserTargetRepository(), roleCatalog, skillDictionary
+        );
+
+        MatchingService matchingService =
+                new MatchingService(roleProfileRepository, userSkillRepository);
+
+        TrajectoryController trajectoryController = new TrajectoryController(
+                userService, roleCatalog, roleProfileService,
+                skillProfileService, matchingService, skillDictionary, in
+        );
+
+        // =========================================
+        // 6. Регистрация команд
+        // =========================================
 
         Map<String, Command> commands = new TreeMap<>();
 
         addCommands(commands, userController.commands());
+        addCommands(commands, trajectoryController.commands());
+
         addCommands(commands, alternativeCareerController.commands());
 
 
