@@ -5,6 +5,8 @@ import navigator.analysis.PostgresVacancyAnalysisRepository;
 import navigator.analysis.VacancyAnalysisRepository;
 import navigator.config.DatabaseConfig;
 
+import navigator.trajectory.alternative.AlternativeCareerController;
+import navigator.trajectory.alternative.AlternativeCareerService;
 import navigator.user.DbUserRepository;
 import navigator.user.UserController;
 import navigator.user.UserService;
@@ -46,18 +48,10 @@ public class Main {
 
     public static void main(String[] args) {
 
-        // Один Scanner для всего консольного приложения
         Scanner in = new Scanner(System.in);
-
-        // =========================================
-        // 1. Подключение к базе данных
-        // =========================================
 
         DatabaseConfig databaseConfig = new DatabaseConfig();
 
-        // =========================================
-        // 2. Создание пользовательского модуля
-        // =========================================
 
         UserService userService = new UserService(
                 new DbUserRepository(
@@ -67,41 +61,30 @@ public class Main {
                 )
         );
 
-        // =========================================
-        // 3. Создание модуля сбора вакансий
-        // =========================================
 
-        VacancyRepository vacancyRepository =
-                new PostgresVacancyRepository(databaseConfig);
 
-        VacancyService vacancyService =
-                new VacancyService(vacancyRepository);
+        VacancyRepository vacancyRepository = new PostgresVacancyRepository(databaseConfig);
 
-        // =========================================
-        // 4. Создание модуля AI-анализа вакансий
-        // =========================================
+        VacancyService vacancyService = new VacancyService(vacancyRepository);
+
+
 
         // Клиент GigaChat
         GigaChatClient gigaChatClient = new GigaChatClient();
 
         // Сервис извлечения навыков из текста вакансии
-        SkillExtractionService extractionService =
-                new SkillExtractionService(gigaChatClient);
+        SkillExtractionService extractionService = new SkillExtractionService(gigaChatClient);
 
         // Сервис нормализации названий навыков
-        SkillSynonymDictionary synonymDictionary =
-                new SkillSynonymDictionary();
+        SkillSynonymDictionary synonymDictionary = new SkillSynonymDictionary();
 
-        SkillNormalizationService normalizationService =
-                new SkillNormalizationService(synonymDictionary);
+        SkillNormalizationService normalizationService = new SkillNormalizationService(synonymDictionary);
 
         // Репозиторий навыков
-        SkillRepository skillRepository =
-                new PostgresSkillRepository();
+        SkillRepository skillRepository = new PostgresSkillRepository();
 
         // Репозиторий для получения вакансий и сохранения извлечённых навыков
-        VacancyAnalysisRepository analysisRepository =
-                new PostgresVacancyAnalysisRepository(skillRepository);
+        VacancyAnalysisRepository analysisRepository = new PostgresVacancyAnalysisRepository(skillRepository);
 
         // Основной сервис AI-анализа
         VacancyAnalysisService vacancyAnalysisService =
@@ -111,9 +94,7 @@ public class Main {
                         normalizationService
                 );
 
-        // =========================================
-        // 5. Создание контроллеров
-        // =========================================
+
 
         VacancyController vacancyController =
                 new VacancyController(
@@ -128,6 +109,11 @@ public class Main {
                         userService,
                         vacancyController
                 );
+        // Модуль подбора альтернативных профессий.
+        AlternativeCareerController alternativeCareerController = new AlternativeCareerController(
+                        userService, new AlternativeCareerService()
+                );
+
 
         // Модуль траектории навыков
         RoleCatalog roleCatalog = new PostgresRoleCatalog();
@@ -160,10 +146,8 @@ public class Main {
         addCommands(commands, userController.commands());
         addCommands(commands, trajectoryController.commands());
 
+        addCommands(commands, alternativeCareerController.commands());
 
-        // =========================================
-        // 7. Запуск консольного приложения
-        // =========================================
 
         System.out.println(
                 "AI Career Navigator. Команды: "
