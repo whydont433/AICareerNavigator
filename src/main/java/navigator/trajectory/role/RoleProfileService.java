@@ -25,7 +25,7 @@ import java.util.Set;
 /** Профили ролей. */
 public class RoleProfileService implements RoleProfileApi {
     private static final int PERIOD_DAYS = 30;
-    private static final int MIN_VACANCIES = 30;
+    private static final int MIN_VACANCIES = 3;
     private static final double MIN_WEIGHT = 0.03;
     private static final int MAX_SKILLS = 10;
 
@@ -68,7 +68,7 @@ public class RoleProfileService implements RoleProfileApi {
         Instant from = Instant.now().minus(PERIOD_DAYS, ChronoUnit.DAYS);
         List<VacancyData> sample = new ArrayList<>();
         for (VacancyData v : vacancies.find(roleId, grade)) {
-            if (v.analyzed() && !v.publishedAt().isBefore(from)) {
+            if (v.analyzed() && v.publishedAt() != null && !v.publishedAt().isBefore(from)) {
                 sample.add(v);
             }
         }
