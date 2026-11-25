@@ -88,3 +88,9 @@ CREATE TABLE vacancy_skills (
                                 PRIMARY KEY (vacancy_id, skill_id)
 );
 
+-- Словарь синонимов навыков (js -> javascript), заполняется агрегацией через GigaChat
+CREATE TABLE skill_synonym_map (
+                                   alias TEXT PRIMARY KEY,
+                                   canonical_name TEXT NOT NULL
+);
+

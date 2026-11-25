@@ -1,5 +1,6 @@
 package navigator.analysis;
 
+import navigator.common.Grade;
 import navigator.skills.ExtractedSkill;
 import navigator.skills.NormalizedSkill;
 import navigator.skills.SkillExtractionService;
@@ -99,6 +100,81 @@ public class VacancyAnalysisService {
         System.out.println("Ошибок: " + failed);
     }
 
+
+    public record Summary(int total, int success, int failed) {
+    }
+
+    public Summary analyzeVacancies(long professionId, Grade grade)
+            throws SQLException, InterruptedException {
+
+        final int maxConsecutiveFailures = 3;
+
+        int total = 0;
+        int success = 0;
+        int failed = 0;
+        int consecutiveFailures = 0;
+        String lastError = null;
+        long lastId = 0;
+
+        while (true) {
+
+            List<VacancyForAnalysis> batch =
+                    repository.findUnanalyzedVacancies(
+                            professionId, grade, lastId, BATCH_SIZE
+                    );
+
+            if (batch.isEmpty()) {
+                break;
+            }
+
+            for (VacancyForAnalysis vacancy : batch) {
+
+                lastId = Math.max(lastId, vacancy.id());
+                total++;
+
+                try {
+
+                    List<ExtractedSkill> extractedSkills =
+                            extractionService.extract(vacancy.description());
+
+                    List<NormalizedSkill> normalizedSkills =
+                            normalizeSkills(extractedSkills);
+
+                    repository.saveVacancySkills(
+                            vacancy.id(),
+                            normalizedSkills
+                    );
+
+                    success++;
+                    consecutiveFailures = 0;
+
+                } catch (IllegalStateException e) {
+
+                    throw new IllegalStateException(
+                            "GigaChat недоступен: " + e.getMessage(), e
+                    );
+
+                } catch (java.io.IOException
+                         | IllegalArgumentException e) {
+
+                    failed++;
+                    consecutiveFailures++;
+                    lastError = e.getMessage();
+
+                    if (consecutiveFailures >= maxConsecutiveFailures) {
+                        throw new IllegalStateException(
+                                "GigaChat недоступен: " + maxConsecutiveFailures
+                                        + " ошибки подряд. Последняя: "
+                                        + lastError, e
+                        );
+                    }
+                }
+            }
+        }
+
+        return new Summary(total, success, failed);
+    }
+
     private List<NormalizedSkill> normalizeSkills(
             List<ExtractedSkill> extractedSkills
     ) {
@@ -115,13 +191,6 @@ public class VacancyAnalysisService {
                 result.add(normalized);
 
             } catch (IllegalArgumentException e) {
-
-                System.err.println(
-                        "Пропущен некорректный навык: "
-                                + skill.name()
-                                + ". Причина: "
-                                + e.getMessage()
-                );
             }
         }
 

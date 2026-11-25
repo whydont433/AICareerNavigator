@@ -21,8 +21,7 @@ public class UserController {
                 "register", this::register,
                 "login", this::login,
                 "logout", this::logout,
-                "whoami", this::whoami,
-                "find-vacancy", this::findVacancy
+                "whoami", this::whoami
         );
     }
 
@@ -43,20 +42,6 @@ public class UserController {
 
     private void whoami(String[] args) {
         System.out.println(service.isLoggedIn() ? "Вы: " + service.requireUser().name() : "Вы не вошли.");
-    }
-
-    private void findVacancy(String[] args) {
-        if (args.length != 0) {
-            throw new IllegalArgumentException(
-            );
-        }
-
-        if (!service.isLoggedIn()) {
-            System.out.println("Сначала необходимо войти в аккаунт.");
-            return;
-        }
-
-        vacancyController.start();
     }
 
     private String oneArg(String[] args, String usage) {

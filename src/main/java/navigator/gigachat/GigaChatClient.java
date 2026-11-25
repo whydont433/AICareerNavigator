@@ -13,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -27,7 +28,9 @@ public class GigaChatClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
-    private final String authKey;
+    // Ключ читается лениво (при первом запросе), чтобы приложение
+    // запускалось и без GigaChat: регистрация/вход ключа не требуют.
+    private String authKey;
     private final String scope;
     private final String model;
 
@@ -35,8 +38,6 @@ public class GigaChatClient {
     private Instant tokenExpiresAt;
 
     public GigaChatClient() {
-
-        this.authKey = requireEnv("GIGACHAT_AUTH_KEY");
 
         this.scope = getEnv(
                 "GIGACHAT_SCOPE",
@@ -88,6 +89,10 @@ public class GigaChatClient {
             return accessToken;
         }
 
+        if (authKey == null) {
+            authKey = requireEnv("GIGACHAT_AUTH_KEY");
+        }
+
         String form = "scope=" + URLEncoder.encode(
                 scope,
                 StandardCharsets.UTF_8
@@ -100,13 +105,11 @@ public class GigaChatClient {
                 .header("Accept", "application/json")
                 .header("RqUID", UUID.randomUUID().toString())
                 .header("Authorization", "Basic " + authKey)
+                .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(form))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString()
-        );
+        HttpResponse<String> response = sendWithRetry(request);
 
         if (response.statusCode() != 200) {
             throw new IOException(
@@ -133,6 +136,137 @@ public class GigaChatClient {
                 .minusSeconds(60);
 
         return accessToken;
+    }
+
+    // Повторяет запрос при лимите запросов (429) и временных ошибках сервера (5xx).
+    private HttpResponse<String> sendWithRetry(HttpRequest request)
+            throws IOException, InterruptedException {
+
+        final int maxAttempts = 3;
+
+        HttpResponse<String> response = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+
+            response = httpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString()
+            );
+
+            int status = response.statusCode();
+
+            if (status != 429 && status < 500) {
+                return response;
+            }
+
+            if (attempt < maxAttempts) {
+                Thread.sleep(2000L * attempt);
+            }
+        }
+
+        return response;
+    }
+
+    /**
+     * Просит GigaChat сгруппировать названия навыков-синонимов
+     * (JS / JavaScript, Postgres / PostgreSQL и т.п.).
+     * Возвращает JSON вида {"groups":[{"canonical":"...","aliases":["..."]}]}.
+     */
+    public String groupSkillSynonyms(java.util.List<String> skillNames)
+            throws IOException, InterruptedException {
+
+        if (skillNames == null || skillNames.isEmpty()) {
+            throw new IllegalArgumentException("Список навыков пуст");
+        }
+
+        String token = getAccessToken();
+
+        ObjectNode body = objectMapper.createObjectNode();
+
+        body.put("model", model);
+        body.put("temperature", 0.0);
+        body.put("max_tokens", 3000);
+
+        ArrayNode messages = body.putArray("messages");
+
+        ObjectNode systemMessage = messages.addObject();
+
+        systemMessage.put("role", "system");
+
+        systemMessage.put("content", """
+                Ты — эксперт по IT-навыкам и технологиям.
+
+                Тебе дают список названий навыков (по одному в строке).
+                Найди среди них СИНОНИМЫ — разные написания одного и того же навыка:
+                сокращения, транслитерацию, варианты с версией или без,
+                русские и английские названия.
+
+                Примеры синонимов:
+                - js, javascript, java script
+                - postgres, postgresql
+                - k8s, kubernetes
+                - питон, python
+
+                НЕ объединяй разные технологии, даже родственные:
+                java и javascript — разные навыки; spring и spring boot — разные;
+                sql и postgresql — разные; react и react native — разные.
+
+                Правила:
+                - в canonical и aliases используй ТОЛЬКО строки из присланного списка,
+                  в том же написании;
+                - canonical — самое общепринятое название из списка;
+                - навык может входить только в одну группу;
+                - если синонимов нет, верни пустой список групп.
+
+                Верни исключительно корректный JSON без Markdown и пояснений:
+
+                {
+                  "groups": [
+                    { "canonical": "javascript", "aliases": ["js", "java script"] }
+                  ]
+                }
+                """);
+
+        ObjectNode userMessage = messages.addObject();
+
+        userMessage.put("role", "user");
+
+        userMessage.put(
+                "content",
+                "Список навыков:\n" + String.join("\n", skillNames)
+        );
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(CHAT_URL))
+                .header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(120))
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        objectMapper.writeValueAsString(body)
+                ))
+                .build();
+
+        HttpResponse<String> response = sendWithRetry(request);
+
+        if (response.statusCode() != 200) {
+            throw new IOException(
+                    "Ошибка GigaChat API: HTTP "
+                            + response.statusCode()
+                            + ", ответ: " + response.body()
+            );
+        }
+
+        JsonNode content = objectMapper.readTree(response.body())
+                .path("choices")
+                .path(0)
+                .path("message")
+                .path("content");
+
+        if (content.isMissingNode() || content.isNull()) {
+            throw new IOException("GigaChat не вернул содержимое ответа");
+        }
+
+        return content.asText();
     }
 
     public String extractSkills(String description)
@@ -272,15 +406,13 @@ public class GigaChatClient {
                 .uri(URI.create(CHAT_URL))
                 .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(90))
                 .POST(HttpRequest.BodyPublishers.ofString(
                         objectMapper.writeValueAsString(body)
                 ))
                 .build();
 
-        HttpResponse<String> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofString()
-        );
+        HttpResponse<String> response = sendWithRetry(request);
 
         if (response.statusCode() != 200) {
             throw new IOException(

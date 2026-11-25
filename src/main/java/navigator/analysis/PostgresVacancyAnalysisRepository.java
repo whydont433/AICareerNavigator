@@ -1,5 +1,6 @@
 package navigator.analysis;
 
+import navigator.common.Grade;
 import navigator.config.DatabaseConfig;
 import navigator.skills.NormalizedSkill;
 import navigator.skills.SkillRepository;
@@ -44,6 +45,59 @@ public class PostgresVacancyAnalysisRepository
                      connection.prepareStatement(sql)) {
 
             statement.setInt(1, limit);
+
+            try (ResultSet resultSet = statement.executeQuery()) {
+
+                while (resultSet.next()) {
+
+                    vacancies.add(
+                            new VacancyForAnalysis(
+                                    resultSet.getLong("id"),
+                                    resultSet.getString("name"),
+                                    resultSet.getString("description")
+                            )
+                    );
+                }
+            }
+        }
+
+        return vacancies;
+    }
+
+    @Override
+    public List<VacancyForAnalysis> findUnanalyzedVacancies(
+            long professionId,
+            Grade grade,
+            long afterId,
+            int limit
+    ) throws SQLException {
+
+        String sql = """
+                SELECT
+                    id,
+                    name,
+                    description
+                FROM vacancies
+                WHERE ai_status = FALSE
+                  AND profession_id = ?
+                  AND grade = ?
+                  AND id > ?
+                  AND description IS NOT NULL
+                  AND TRIM(description) <> ''
+                ORDER BY id
+                LIMIT ?
+                """;
+
+        List<VacancyForAnalysis> vacancies = new ArrayList<>();
+
+        try (Connection connection = DatabaseConfig.getConnection();
+             PreparedStatement statement =
+                     connection.prepareStatement(sql)) {
+
+            statement.setLong(1, professionId);
+            statement.setString(2, grade.name());
+            statement.setLong(3, afterId);
+            statement.setInt(4, limit);
 
             try (ResultSet resultSet = statement.executeQuery()) {
 

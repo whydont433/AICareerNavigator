@@ -112,10 +112,6 @@ public class VacancyService {
                     repository.save(vacancy, params.profession());
 
                     collected++;
-
-                    System.out.println(
-                            "Найдена вакансия: " + vacancy.name()
-                    );
                 }
 
                 more = response.path("more").asBoolean(false);
@@ -148,10 +144,17 @@ public class VacancyService {
     private JsonNode sendRequest(String url)
             throws IOException, InterruptedException {
 
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "Не задана переменная окружения SUPERJOB_API_KEY"
+            );
+        }
+
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("X-Api-App-Id", apiKey)
                 .header("Accept", "application/json")
+                .timeout(java.time.Duration.ofSeconds(30))
                 .GET()
                 .build();
 

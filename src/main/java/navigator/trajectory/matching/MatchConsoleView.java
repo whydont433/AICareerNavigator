@@ -77,7 +77,7 @@ public class MatchConsoleView {
         List<Long> unfilled = result.unfilledSkillIds();
         if (!unfilled.isEmpty()) {
             List<String> missing = unfilled.stream().map(names::get).toList();
-            System.out.printf("Не заполнено: %d (%s) — fill%n",
+            System.out.printf("Не оценено: %d (%s)%n",
                     missing.size(), String.join(", ", missing));
         }
 
