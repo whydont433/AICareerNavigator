@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-/** Профили ролей. */
 public class RoleProfileService implements RoleProfileApi {
     private static final int PERIOD_DAYS = 30;
     private static final int MIN_VACANCIES = 3;
@@ -62,6 +61,33 @@ public class RoleProfileService implements RoleProfileApi {
         }
         repository.replaceAll(built);
         return built.size();
+    }
+
+
+    public Optional<RoleProfile> rebuild(String roleId, Grade grade) {
+        Optional<RoleProfile> rebuilt = build(roleId, grade);
+
+        List<RoleProfile> all = new ArrayList<>();
+        for (RoleProfile existing : repository.findAll()) {
+            boolean same = existing.roleId().equals(roleId) && existing.grade() == grade;
+            if (!same) {
+                all.add(existing);
+            }
+        }
+        rebuilt.ifPresent(all::add);
+
+        repository.replaceAll(all);
+        return rebuilt;
+    }
+
+    public int analyzedCount(String roleId, Grade grade) {
+        int count = 0;
+        for (VacancyData v : vacancies.find(roleId, grade)) {
+            if (v.analyzed()) {
+                count++;
+            }
+        }
+        return count;
     }
 
     Optional<RoleProfile> build(String roleId, Grade grade) {

@@ -5,7 +5,7 @@ import navigator.analysis.PostgresVacancyAnalysisRepository;
 import navigator.analysis.VacancyAnalysisRepository;
 import navigator.config.DatabaseConfig;
 
-import navigator.trajectory.alternative.AlternativeCareerController;
+import navigator.flow.CareerFlowController;
 import navigator.trajectory.alternative.AlternativeCareerService;
 import navigator.user.DbUserRepository;
 import navigator.user.UserController;
@@ -22,6 +22,7 @@ import navigator.skills.SkillRepository;
 import navigator.skills.PostgresSkillRepository;
 import navigator.skills.SkillSynonymDictionary;
 import navigator.skills.SkillNormalizationService;
+import navigator.skills.SkillSynonymService;
 
 import navigator.trajectory.TrajectoryController;
 import navigator.trajectory.external.RoleCatalog;
@@ -33,12 +34,14 @@ import navigator.trajectory.external.VacancyReader;
 import navigator.trajectory.matching.MatchingService;
 import navigator.trajectory.profile.PostgresUserSkillRepository;
 import navigator.trajectory.profile.PostgresUserTargetRepository;
+import navigator.trajectory.profile.UserTargetRepository;
 import navigator.trajectory.profile.SkillProfileService;
 import navigator.trajectory.profile.UserSkillRepository;
 import navigator.trajectory.role.PostgresRoleProfileRepository;
 import navigator.trajectory.role.RoleProfileRepository;
 import navigator.trajectory.role.RoleProfileService;
 
+import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.TreeMap;
 import java.util.Map;
@@ -52,12 +55,21 @@ public class Main {
 
         DatabaseConfig databaseConfig = new DatabaseConfig();
 
+        // Проверяем БД и схему до начала работы: без БД приложение не работает
+        try {
+            DatabaseConfig.ensureSchema();
+        } catch (SQLException e) {
+            System.err.println("База данных недоступна: " + e.getMessage());
+            System.err.println("Проверьте, что PostgreSQL запущен (docker compose up -d), "
+                    + "а DB_URL / DB_USER / DB_PASSWORD заданы верно.");
+            return;
+        }
 
         UserService userService = new UserService(
                 new DbUserRepository(
-                        "jdbc:postgresql://localhost:5432/career_navigator",
-                        "postgres",
-                        "postgres"
+                        DatabaseConfig.url(),
+                        DatabaseConfig.user(),
+                        DatabaseConfig.password()
                 )
         );
 
@@ -79,6 +91,16 @@ public class Main {
         SkillSynonymDictionary synonymDictionary = new SkillSynonymDictionary();
 
         SkillNormalizationService normalizationService = new SkillNormalizationService(synonymDictionary);
+
+        // Агрегация синонимов навыков через GigaChat (JS = JavaScript и т.п.)
+        SkillSynonymService synonymService =
+                new SkillSynonymService(gigaChatClient, synonymDictionary);
+
+        try {
+            synonymService.loadKnownSynonyms();
+        } catch (SQLException e) {
+            System.err.println("Не удалось загрузить словарь синонимов: " + e.getMessage());
+        }
 
         // Репозиторий навыков
         SkillRepository skillRepository = new PostgresSkillRepository();
@@ -109,24 +131,24 @@ public class Main {
                         userService,
                         vacancyController
                 );
-        // Модуль подбора альтернативных профессий.
-        AlternativeCareerController alternativeCareerController = new AlternativeCareerController(
-                        userService, new AlternativeCareerService()
-                );
-
-
         // Модуль траектории навыков
         RoleCatalog roleCatalog = new PostgresRoleCatalog();
         SkillDictionary skillDictionary = new PostgresSkillDictionary(synonymDictionary);
         RoleProfileRepository roleProfileRepository = new PostgresRoleProfileRepository();
         UserSkillRepository userSkillRepository = new PostgresUserSkillRepository();
+        UserTargetRepository userTargetRepository = new PostgresUserTargetRepository();
         VacancyReader trajectoryVacancies = new PostgresVacancyReader();
+
+        // Модуль подбора альтернативных профессий.
+        AlternativeCareerService alternativeCareerService = new AlternativeCareerService(
+                userSkillRepository, roleProfileRepository, userTargetRepository, roleCatalog
+        );
 
         RoleProfileService roleProfileService =
                 new RoleProfileService(roleProfileRepository, trajectoryVacancies, roleCatalog);
 
         SkillProfileService skillProfileService = new SkillProfileService(
-                userSkillRepository, new PostgresUserTargetRepository(), roleCatalog, skillDictionary
+                userSkillRepository, userTargetRepository, roleCatalog, skillDictionary
         );
 
         MatchingService matchingService =
@@ -137,23 +159,29 @@ public class Main {
                 skillProfileService, matchingService, skillDictionary, in
         );
 
-        // =========================================
-        // 6. Регистрация команд
-        // =========================================
+
+        CareerFlowController flowController = new CareerFlowController(
+                userService, vacancyService, vacancyAnalysisService, synonymService,
+                roleCatalog, roleProfileService, skillProfileService,
+                trajectoryController, alternativeCareerService, in
+        );
+
 
         Map<String, Command> commands = new TreeMap<>();
 
         addCommands(commands, userController.commands());
-        addCommands(commands, trajectoryController.commands());
+        addCommands(commands, flowController.commands());
 
-        addCommands(commands, alternativeCareerController.commands());
-
-
-        System.out.println(
-                "AI Career Navigator. Команды: "
-                        + commands.keySet()
-                        + ", exit"
-        );
+        System.out.println("""
+                AI Career Navigator.
+                Команды:
+                  register <имя>      — регистрация
+                  login <имя>         — вход
+                  select vacancy      — выбрать профессию и оценить свои навыки
+                  change my vacancy   — сменить выбранную профессию
+                  report              — отчёт: профессия, навыки, соответствие, альтернативы
+                  whoami, logout, exit
+                """);
 
         while (true) {
 
@@ -175,31 +203,62 @@ public class Main {
 
             String[] parts = line.split("\\s+");
 
-            Command command =
-                    commands.get(parts[0].toLowerCase());
+            Command command = null;
+            int commandWords = 0;
+
+            for (int n = Math.min(3, parts.length); n >= 1; n--) {
+                String key = String.join(" ", Arrays.copyOfRange(parts, 0, n))
+                        .toLowerCase();
+
+                command = commands.get(key);
+
+                if (command != null) {
+                    commandWords = n;
+                    break;
+                }
+            }
 
             if (command == null) {
-                System.out.println("Неизвестная команда");
+                System.out.println("Неизвестная команда. Доступные: " + commands.keySet() + ", exit");
                 continue;
             }
 
             try {
-                command.execute(
-                        Arrays.copyOfRange(parts, 1, parts.length)
-                );
+                command.execute(Arrays.copyOfRange(parts, commandWords, parts.length));
 
             } catch (IllegalArgumentException e) {
                 System.out.println(e.getMessage());
 
             } catch (Exception e) {
-                System.err.println(
-                        "Ошибка выполнения команды: " + e.getMessage()
-                );
-                e.printStackTrace();
+                System.err.println(describe(e));
+
+                if (System.getenv("DEBUG") != null) {
+                    e.printStackTrace();
+                }
             }
         }
 
         System.out.println("Приложение завершено.");
+    }
+
+    //Сообщения об ошибках
+    private static String describe(Throwable error) {
+
+        for (Throwable t = error; t != null; t = t.getCause()) {
+            if (t instanceof SQLException sql) {
+                String state = sql.getSQLState();
+
+                if (state == null || state.startsWith("08")) {
+                    return "База данных недоступна: " + sql.getMessage();
+                }
+
+                return "Ошибка базы данных: " + sql.getMessage();
+            }
+        }
+
+        String message = error.getMessage();
+
+        return "Ошибка: " + (message == null ? error.getClass().getSimpleName() : message);
     }
 
     private static void addCommands(

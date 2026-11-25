@@ -115,7 +115,8 @@ public class TrajectoryController {
         showRole(target);
     }
 
-    private void showRole(UserTarget target) {
+    /** Показать профиль роли (используется командой analyze). */
+    public void showRole(UserTarget target) {
         RoleProfile profile = roleProfiles.find(target.roleId(), target.grade()).orElse(null);
         if (profile == null) {
             System.out.println(noProfileMessage(target));
@@ -123,7 +124,7 @@ public class TrajectoryController {
         }
 
         System.out.printf("%s (%s), по %d вакансиям, данные от %s%n",
-                profile.roleId(), profile.grade(), profile.sampleSize(), profile.computedAt().toLocalDate());
+                roleName(profile.roleId()), profile.grade(), profile.sampleSize(), profile.computedAt().toLocalDate());
         for (RoleProfileSkill skill : profile.skills()) {
             System.out.printf("%s — в %.0f%% вакансий, нужен уровень %d/6%n",
                     dictionary.nameOf(skill.skillId()), skill.weight() * 100, skill.requiredLevel());
@@ -131,8 +132,11 @@ public class TrajectoryController {
     }
 
     private void fill(String[] args) {
+        fillSkills(targetOrCurrent(args, "fill [<роль> <грейд>]"));
+    }
+
+    public void fillSkills(UserTarget target) {
         long userId = users.requireUser().id();
-        UserTarget target = targetOrCurrent(args, "fill [<роль> <грейд>]");
         RoleProfile profile = roleProfiles.find(target.roleId(), target.grade())
                 .orElseThrow(() -> new IllegalArgumentException(noProfileMessage(target)));
         List<RoleProfileSkill> unfilled = skillProfiles.unfilledSkills(userId, profile);
@@ -189,6 +193,10 @@ public class TrajectoryController {
         System.out.printf("%s — сохранён уровень %d/6%n", dictionary.nameOf(skillId), level);
     }
 
+    public void showProfile() {
+        profile(new String[0]);
+    }
+
     private void profile(String[] args) {
         if (args.length != 0) {
             throw new IllegalArgumentException("Использование: profile");
@@ -196,8 +204,8 @@ public class TrajectoryController {
 
         long userId = users.requireUser().id();
         skillProfiles.getTarget(userId).ifPresentOrElse(
-                target -> System.out.printf("Цель: %s (%s)%n", target.roleId(), target.grade()),
-                () -> System.out.println("Выберите цель: role select <роль> <грейд>")
+                target -> System.out.printf("Цель: %s (%s)%n", roleName(target.roleId()), target.grade()),
+                () -> System.out.println("Выберите вакансию: select vacancy")
         );
         System.out.println("Часов в неделю: " + skillProfiles.getAvailableTimeWeekly(userId));
 
@@ -218,8 +226,12 @@ public class TrajectoryController {
     }
 
     private void match(String[] args) {
+        showMatch(targetOrCurrent(args, "match [<роль> <грейд>]"));
+    }
+
+
+    public void showMatch(UserTarget target) {
         long userId = users.requireUser().id();
-        UserTarget target = targetOrCurrent(args, "match [<роль> <грейд>]");
         RoleProfile profile = roleProfiles.find(target.roleId(), target.grade())
                 .orElseThrow(() -> new IllegalArgumentException(noProfileMessage(target)));
 
@@ -236,7 +248,7 @@ public class TrajectoryController {
         }
 
         return skillProfiles.getTarget(users.requireUser().id())
-                .orElseThrow(() -> new IllegalArgumentException("Выберите цель: role select <роль> <грейд>"));
+                .orElseThrow(() -> new IllegalArgumentException("Выберите вакансию: select vacancy"));
     }
 
     private int parseLevel(String text) {
@@ -253,6 +265,15 @@ public class TrajectoryController {
     }
 
     private String noProfileMessage(UserTarget target) {
-        return "Нет данных по роли " + target.roleId() + " (" + target.grade() + ").";
+        return "Нет данных по роли " + roleName(target.roleId()) + " (" + target.grade() + ").";
+    }
+
+    private String roleName(String roleId) {
+        for (RoleInfo role : roles.all()) {
+            if (role.id().equals(roleId)) {
+                return role.name();
+            }
+        }
+        return roleId;
     }
 }

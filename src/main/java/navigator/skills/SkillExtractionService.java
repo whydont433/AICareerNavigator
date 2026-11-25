@@ -18,7 +18,9 @@ public class SkillExtractionService {
             GigaChatClient gigaChatClient
     ) {
         this.gigaChatClient = gigaChatClient;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = new ObjectMapper()
+                .configure(com.fasterxml.jackson.databind.DeserializationFeature
+                        .FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     public List<ExtractedSkill> extract(String description)
@@ -81,6 +83,16 @@ public class SkillExtractionService {
             json = json.substring(0, json.length() - 3);
         }
 
-        return json.trim();
+        json = json.trim();
+
+        // Модель иногда добавляет текст вокруг JSON — берём только сам объект.
+        int start = json.indexOf('{');
+        int end = json.lastIndexOf('}');
+
+        if (start >= 0 && end > start) {
+            json = json.substring(start, end + 1);
+        }
+
+        return json;
     }
 }

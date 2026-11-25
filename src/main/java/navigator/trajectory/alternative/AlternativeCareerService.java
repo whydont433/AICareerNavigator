@@ -6,6 +6,8 @@ import navigator.trajectory.api.MatchResult;
 import navigator.trajectory.api.RoleProfile;
 import navigator.trajectory.api.UserSkill;
 import navigator.trajectory.api.UserTarget;
+import navigator.trajectory.external.RoleCatalog;
+import navigator.trajectory.external.RoleInfo;
 import navigator.trajectory.matching.MatchingService;
 import navigator.trajectory.profile.UserSkillRepository;
 import navigator.trajectory.profile.UserTargetRepository;
@@ -22,17 +24,23 @@ public class AlternativeCareerService {
 
     private static final int RESULT_LIMIT = 5;
 
-    private UserSkillRepository userSkillRepository;
-    private RoleProfileRepository roleProfileRepository;
-    private UserTargetRepository userTargetRepository;
+    private final UserSkillRepository userSkillRepository;
+    private final RoleProfileRepository roleProfileRepository;
+    private final UserTargetRepository userTargetRepository;
+    private final RoleCatalog roleCatalog;
 
     private final MatchingService matchingService;
 
     public AlternativeCareerService(
-            ) {
+            UserSkillRepository userSkillRepository,
+            RoleProfileRepository roleProfileRepository,
+            UserTargetRepository userTargetRepository,
+            RoleCatalog roleCatalog
+    ) {
         this.userSkillRepository = userSkillRepository;
         this.roleProfileRepository = roleProfileRepository;
         this.userTargetRepository = userTargetRepository;
+        this.roleCatalog = roleCatalog;
 
         this.matchingService = new MatchingService(
                 roleProfileRepository,
@@ -68,12 +76,13 @@ public class AlternativeCareerService {
                 .toList();
 
         if (profiles.isEmpty()) {
-            System.out.println("Не найдены профили других профессий для сравнения.");
+            System.out.println(
+                    "Пока нет профилей других профессий для сравнения. "
+                            + "Выберите через change my vacancy одну-две смежные профессии "
+                            + "(например, другой стек или соседнюю роль), "
+                            + "затем вернитесь к своей — и альтернативы появятся.");
             return;
         }
-
-        //Используем существующий механизм сравнения
-        MatchingService matchingService = new MatchingService(roleProfileRepository, userSkillRepository);
 
         // Для каждой профессии выбираем наиболее подходящий пользователю грейд
         Map<String, Alternative> bestByProfession = new LinkedHashMap<>();
@@ -84,7 +93,7 @@ public class AlternativeCareerService {
                     matchingService.calculate(profile, userSkills);
 
             Alternative candidate = new Alternative(
-                    profile.roleId(),
+                    roleName(profile.roleId()),
                     profile.grade(),
                     match.matchPercent(),
                     profile.sampleSize(),
@@ -126,7 +135,7 @@ public class AlternativeCareerService {
         // Выводим результат
         System.out.println();
 
-        System.out.println("Альтернативные профессии для основной профессии: " + target.roleId());
+        System.out.println("Альтернативные профессии для основной профессии: " + roleName(target.roleId()));
 
         System.out.println(
                 "Учитывается навыков пользователя: " + userSkills.size());
@@ -190,6 +199,17 @@ public class AlternativeCareerService {
         }
 
         return candidate.sampleSize() > previous.sampleSize();
+    }
+
+    private String roleName(String roleId) {
+
+        for (RoleInfo role : roleCatalog.all()) {
+            if (role.id().equals(roleId)) {
+                return role.name();
+            }
+        }
+
+        return roleId;
     }
 
     private int gradeRank(Grade grade) {
